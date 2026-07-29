@@ -5,10 +5,12 @@ from typing import TypedDict
 from pypdf import PdfReader
 from docx import Document
 from langgraph.graph import StateGraph, END
+import request
 
 
 class AgentState(TypedDict):
     """Structure de l'état utilisé par les nœuds du graph."""
+
     question: str
     reponse: str
     type_question: str
@@ -17,6 +19,7 @@ class AgentState(TypedDict):
 # ==============================================================================
 # FONCTIONS DE LECTURE DE FICHIERS (PDF, DOCX, TXT)
 # ==============================================================================
+
 
 def pdf_reader(chemin_fichier):
     """Extrait le texte d'un fichier PDF page par page."""
@@ -47,6 +50,7 @@ def txt_reader(chemin_fichier):
 # NŒUD D'ANALYSE ET NŒUD DE RÉPONSE GÉNÉRIQUE
 # ==============================================================================
 
+
 def analyse_node(state):
     """Affiche le message d'analyse de la question."""
     print("Analyse de la question...")
@@ -63,6 +67,7 @@ def reponse_node(state):
 # ==============================================================================
 # NŒUDS DE TRAITEMENT SPÉCIFIQUES (Calcul, Doc, Salutation, Lecteurs)
 # ==============================================================================
+
 
 def calculatrice_node(state):
     """Traite les demandes de calcul en évaluant l'expression mathématique."""
@@ -114,10 +119,11 @@ def docx_reader_node(state):
 # DÉCISION ET ROUTAGE
 # ==============================================================================
 
+
 def decision_node(state):
     """Détermine la catégorie de la question selon son contenu."""
     question = state["question"].lower()
-    
+
     if "bonjour" in question or "salut" in question:
         state["type_question"] = "salutation"
     elif any(op in question for op in ["+", "-", "*", "/"]):
@@ -130,7 +136,7 @@ def decision_node(state):
         state["type_question"] = "txt"
     else:
         state["type_question"] = "documentation"
-        
+
     return state
 
 
@@ -172,8 +178,8 @@ workflow.add_conditional_edges(
         "pdf": "pdf_reader",
         "docx": "docx_reader",
         "txt": "txt_reader",
-        "documentation": "documentation"
-    }
+        "documentation": "documentation",
+    },
 )
 
 # Arrivées à la fin du graph (END)

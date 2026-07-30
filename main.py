@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from agent import agent
+from Agent import agent
 from pydantic import BaseModel
 
 app = FastAPI()
@@ -32,3 +32,27 @@ def utilisateur(nom):
 
 class QuestionRequest(BaseModel):
     question: str
+
+
+# Déclarer la route /question
+# @app.post(
+#     "/question"
+# )  # d'envoyer des données ( GET/POST et non simplement de consulter.
+# def poser_question(request: QuestionRequest):
+#     #  pass
+#     resultat = agent.invoke({"question": request.question})
+#     return resultat
+
+
+@app.get("/status")
+def status():
+    return {"etat": "OK"}
+
+
+@app.post("/question")
+def poser_question(request: QuestionRequest):
+    try:
+        resultat = agent.invoke({"question": request.question})
+        return {"reponse": resultat["reponse"]}
+    except Exception as e:
+        return {"erreur": str(e)}

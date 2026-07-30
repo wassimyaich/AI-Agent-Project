@@ -27,7 +27,7 @@ class AgentState(TypedDict):
 
 def llm_local(prompt):
     """Envoie un prompt à Phi-3 (ou un autre modèle local) via Ollama et renvoie sa réponse."""
-    url = "http://localhost:11434/api/generate"
+    url = "http://host.docker.internal:localhost:11434/api/generate"
     data = {"model": "phi3", "prompt": prompt, "stream": False}
     response = requests.post(url, json=data)
     return response.json()["response"]

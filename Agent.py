@@ -385,6 +385,7 @@ agent = workflow.compile()
 # EXECUTION ET TESTS (Doc 4 - Partie 9 : Campagne de Tests Consolidée)
 # ==============================================================================
 
+
 if __name__ == "__main__":
     # Liste de questions de test incluant cas d'erreur / réels
     questions = [

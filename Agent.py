@@ -387,6 +387,7 @@ agent = workflow.compile()
 
 
 if __name__ == "__main__":
+    memoire = []
     # Liste de questions de test incluant cas d'erreur / réels
     questions = [
         "",  # Test Cas 1: Question vide
@@ -395,8 +396,6 @@ if __name__ == "__main__":
         "50+20",
         "Lis procedure.docx",
     ]
-
-    memoire = []
 
     for question in questions:
         # Contrôle question vide (Doc 4 - Étape 40)

@@ -1,4 +1,6 @@
 from fastapi import FastAPI
+from agent import agent
+from pydantic import BaseModel
 
 app = FastAPI()
 
@@ -26,3 +28,7 @@ def info():
 @app.get("/utilisateur/{nom}")
 def utilisateur(nom):
     return {"message": f"Bonjour {nom}"}
+
+
+class QuestionRequest(BaseModel):
+    question: str

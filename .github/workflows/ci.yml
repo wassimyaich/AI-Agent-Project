@@ -19,13 +19,12 @@ jobs:
           python-version: "3.12"
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: |
+          pip install -r requirements.txt
+          pip install pytest pytest-cov
 
-      - name: Syntax Check (Agent.py)
-        run: python -m py_compile Agent.py
-
-      - name: Syntax Check (main.py)
-        run: python -m py_compile main.py
+      - name: Run Tests with Coverage
+        run: pytest --cov=. --cov-report=xml
 
       - name: SonarCloud Scan
         uses: sonarsource/sonarcloud-github-action@master
@@ -34,5 +33,4 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
       - name: Docker Build
-        run: |
-          docker build -t agent-ia .
+        run: docker build -t agent-ia .

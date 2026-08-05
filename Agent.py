@@ -1,6 +1,8 @@
 # ==============================================================================
 # IMPORTS ET DÉFINITION DE L'ÉTAT (AgentState)
 # ==============================================================================
+import ast
+import operator
 import os
 import time
 from typing import TypedDict
@@ -9,13 +11,23 @@ from langgraph.graph import END, StateGraph
 from pypdf import PdfReader
 import requests
 
-# Constantes pour éviter les duplications et sécuriser le code
+# Chemins absolus basés sur l'emplacement du fichier Agent.py
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DOCS_DIR = os.path.join(BASE_DIR, "documents")
+
 FILE_NOT_FOUND_MSG = "Fichier introuvable."
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "localhost")
 OLLAMA_SCHEME = os.getenv("OLLAMA_SCHEME", "http")
 OLLAMA_URL = f"{OLLAMA_SCHEME}://{OLLAMA_HOST}:11434/api/generate"
 
-# Variable globale pour la mémoire longue
+OPERATEURS = {
+    ast.Add: operator.add,
+    ast.Sub: operator.sub,
+    ast.Mult: operator.mul,
+    ast.Div: operator.truediv,
+    ast.USub: operator.neg,
+}
+
 historique = ""
 
 
@@ -28,7 +40,7 @@ class AgentState(TypedDict):
 
 
 # ==============================================================================
-# Outils API OLLAMA
+# Outils API OLLAMA & CALCUL SÉCURISÉ
 # ==============================================================================
 def llm_local(prompt: str) -> str:
     """Envoie un prompt au modèle local via Ollama et renvoie sa réponse."""
@@ -42,42 +54,68 @@ def llm_local(prompt: str) -> str:
         return "Erreur lors de la communication avec le modèle AI."
 
 
+def safe_eval(node):
+    """Évalue récursivement les opérations mathématiques basiques de façon sécurisée."""
+    if isinstance(node, ast.Expression):
+        return safe_eval(node.body)
+    elif isinstance(node, ast.Constant):
+        return node.value
+    elif isinstance(node, ast.BinOp):
+        left = safe_eval(node.left)
+        right = safe_eval(node.right)
+        return OPERATEURS[type(node.op)](left, right)
+    elif isinstance(node, ast.UnaryOp):
+        operand = safe_eval(node.operand)
+        return OPERATEURS[type(node.op)](operand)
+    else:
+        raise ValueError("Expression non autorisée")
+
+
 # ==============================================================================
 # FONCTIONS DE LECTURE DE FICHIERS (PDF, DOCX, TXT)
 # ==============================================================================
-def pdf_reader(chemin_fichier: str) -> str:
-    """Extrait le texte d'un PDF avec gestion explicite des exceptions."""
+def pdf_reader(nom_fichier: str) -> str:
+    """Extrait le texte d'un PDF à partir du dossier documents."""
+    chemin = os.path.join(DOCS_DIR, nom_fichier)
     try:
-        lecteur = PdfReader(chemin_fichier)
-        contenu = ""
-        for page in lecteur.pages:
-            contenu += page.extract_text() or ""
-        return contenu
-    except (FileNotFoundError, Exception) as err:
-        print(f"[LOG ERROR] Erreur lecture PDF ({chemin_fichier}): {err}")
+        lecteur = PdfReader(chemin)
+        contenu = "".join([page.extract_text() or "" for page in lecteur.pages]).strip()
+        print(
+            f"[LOG FILE] PDF '{nom_fichier}' lu avec succès ({len(contenu)} caractères)."
+        )
+        return contenu if contenu else FILE_NOT_FOUND_MSG
+    except Exception as err:
+        print(f"[LOG ERROR] Impossible de lire le PDF ({chemin}): {err}")
         return FILE_NOT_FOUND_MSG
 
 
-def docx_reader(chemin_fichier: str) -> str:
-    """Extrait le texte d'un DOCX avec gestion explicite des exceptions."""
+def docx_reader(nom_fichier: str) -> str:
+    """Extrait le texte d'un DOCX à partir du dossier documents."""
+    chemin = os.path.join(DOCS_DIR, nom_fichier)
     try:
-        doc = Document(chemin_fichier)
-        contenu = ""
-        for paragraphe in doc.paragraphs:
-            contenu += paragraphe.text + "\n"
-        return contenu
-    except (FileNotFoundError, Exception) as err:
-        print(f"[LOG ERROR] Erreur lecture DOCX ({chemin_fichier}): {err}")
+        doc = Document(chemin)
+        contenu = "\n".join([p.text for p in doc.paragraphs if p.text.strip()]).strip()
+        print(
+            f"[LOG FILE] DOCX '{nom_fichier}' lu avec succès ({len(contenu)} caractères)."
+        )
+        return contenu if contenu else FILE_NOT_FOUND_MSG
+    except Exception as err:
+        print(f"[LOG ERROR] Impossible de lire le DOCX ({chemin}): {err}")
         return FILE_NOT_FOUND_MSG
 
 
-def txt_reader(chemin_fichier: str) -> str:
-    """Lit un fichier TXT avec gestion explicite des exceptions."""
+def txt_reader(nom_fichier: str) -> str:
+    """Lit un fichier TXT à partir du dossier documents."""
+    chemin = os.path.join(DOCS_DIR, nom_fichier)
     try:
-        with open(chemin_fichier, "r", encoding="utf-8") as fichier:
-            return fichier.read()
-    except (FileNotFoundError, Exception) as err:
-        print(f"[LOG ERROR] Erreur lecture TXT ({chemin_fichier}): {err}")
+        with open(chemin, "r", encoding="utf-8") as fichier:
+            contenu = fichier.read().strip()
+            print(
+                f"[LOG FILE] TXT '{nom_fichier}' lu avec succès ({len(contenu)} caractères)."
+            )
+            return contenu if contenu else FILE_NOT_FOUND_MSG
+    except Exception as err:
+        print(f"[LOG ERROR] Impossible de lire le TXT ({chemin}): {err}")
         return FILE_NOT_FOUND_MSG
 
 
@@ -103,11 +141,12 @@ def documentation_node(state: AgentState) -> AgentState:
 # NŒUDS DE TRAITEMENT SPÉCIFIQUES
 # ==============================================================================
 def calculatrice_node(state: AgentState) -> AgentState:
-    """Traite les demandes de calcul en évaluant l'expression mathématique."""
+    """Traite les demandes de calcul via l'analyseur AST sécurisé."""
     question = state["question"]
     try:
         expression = "".join(c for c in question if c in "0123456789+-*/.()")
-        resultat = eval(expression)  # pylint: disable=eval-used
+        tree = ast.parse(expression, mode="eval")
+        resultat = safe_eval(tree)
         state["reponse"] = str(resultat)
     except Exception as err:
         print(f"[LOG ERROR] Calcul impossible: {err}")
@@ -122,28 +161,48 @@ def greeting_node(state: AgentState) -> AgentState:
 
 
 def txt_reader_node(state: AgentState) -> AgentState:
-    """Lit rh.txt, injecte l'historique + contexte et interroge Ollama."""
-    contenu = txt_reader("documents/rh.txt")
+    """Lit rh.txt (ou reglement.txt), injecte le contenu et interroge Ollama."""
+    nom = (
+        "reglement.txt"
+        if os.path.exists(os.path.join(DOCS_DIR, "reglement.txt"))
+        else "rh.txt"
+    )
+    contenu = txt_reader(nom)
+    if contenu == FILE_NOT_FOUND_MSG:
+        state["reponse"] = (
+            f"Erreur : Le fichier TXT ({nom}) est introuvable dans {DOCS_DIR}."
+        )
+        return state
     question = state["question"]
-    prompt = f"Historique:\n{historique}\n\nContexte:\n{contenu}\n\nQuestion:\n{question}\n\nRéponse:\n"
+    prompt = f"Réponds précisément à la question en utilisant le document suivant.\n\nDocument:\n{contenu}\n\nQuestion:\n{question}\n\nRéponse:"
     state["reponse"] = llm_local(prompt)
     return state
 
 
 def pdf_reader_node(state: AgentState) -> AgentState:
-    """Lit formation.pdf, injecte l'historique + contexte et interroge Ollama."""
-    contenu = pdf_reader("documents/formation.pdf")
+    """Lit formation.pdf, injecte le contenu et interroge Ollama."""
+    contenu = pdf_reader("formation.pdf")
+    if contenu == FILE_NOT_FOUND_MSG:
+        state["reponse"] = (
+            f"Erreur : Le fichier formation.pdf est introuvable ou vide dans {DOCS_DIR}."
+        )
+        return state
     question = state["question"]
-    prompt = f"Historique:\n{historique}\n\nContexte:\n{contenu}\n\nQuestion:\n{question}\n\nRéponse:\n"
+    prompt = f"Réponds précisément à la question en utilisant le document suivant.\n\nDocument:\n{contenu}\n\nQuestion:\n{question}\n\nRéponse:"
     state["reponse"] = llm_local(prompt)
     return state
 
 
 def docx_reader_node(state: AgentState) -> AgentState:
-    """Lit procedure.docx, injecte l'historique + contexte et interroge Ollama."""
-    contenu = docx_reader("documents/procedure.docx")
+    """Lit procedure.docx, injecte le contenu et interroge Ollama."""
+    contenu = docx_reader("procedure.docx")
+    if contenu == FILE_NOT_FOUND_MSG:
+        state["reponse"] = (
+            f"Erreur : Le fichier procedure.docx est introuvable ou vide dans {DOCS_DIR}."
+        )
+        return state
     question = state["question"]
-    prompt = f"Historique:\n{historique}\n\nContexte:\n{contenu}\n\nQuestion:\n{question}\n\nRéponse:\n"
+    prompt = f"Réponds précisément à la question en utilisant le document suivant.\n\nDocument:\n{contenu}\n\nQuestion:\n{question}\n\nRéponse:"
     state["reponse"] = llm_local(prompt)
     return state
 
@@ -163,7 +222,12 @@ def decision_node(state: AgentState) -> AgentState:
         state["type_question"] = "pdf"
     elif ".docx" in question or "procedure" in question:
         state["type_question"] = "docx"
-    elif ".txt" in question or "rh" in question or "lis" in question:
+    elif (
+        ".txt" in question
+        or "rh" in question
+        or "reglement" in question
+        or "lis" in question
+    ):
         state["type_question"] = "txt"
     else:
         state["type_question"] = "documentation"

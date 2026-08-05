@@ -7,6 +7,7 @@ from docx import Document
 from langgraph.graph import END, StateGraph
 from pypdf import PdfReader
 import requests
+import os
 
 # Variable globale pour la mémoire longue (Doc 4, Partie 1 & 2)
 historique = ""
@@ -23,14 +24,21 @@ class AgentState(TypedDict):
 # ==============================================================================
 # Outils API OLLAMA (Doc 1 - Étape 13 / Doc 2 - Étape 16 / Doc 3 - Étape 33)
 # ==============================================================================
+# Default to localhost when running on the Windows host;
+# use host.docker.internal only when running inside Docker.
+OLLAMA_HOST = os.getenv("OLLAMA_HOST", "localhost")
+OLLAMA_URL = f"http://{OLLAMA_HOST}:11434/api/generate"
 
 
 def llm_local(prompt):
     """Envoie un prompt à Phi-3 (ou un autre modèle local) via Ollama et renvoie sa réponse."""
-    url = "http://host.docker.internal:localhost:11434/api/generate"
-    data = {"model": "phi3", "prompt": prompt, "stream": False}
-    response = requests.post(url, json=data)
-    return response.json()["response"]
+    # url = "http://host.docker.internal:11434/api/generate"
+
+    data = {"model": "gemma", "prompt": prompt, "stream": False}
+    # response = requests.post(url, json=data)
+    response = requests.post(OLLAMA_URL, json=data)
+    return response.json().get("response", "")
+    # return response.json()["response"]
 
 
 # ==============================================================================

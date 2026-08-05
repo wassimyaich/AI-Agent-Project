@@ -1,10 +1,12 @@
-FROM python:3.11-slim
+FROM python:3.14
 
 WORKDIR /app
 
-# Copy requirements first for better layer caching
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+
+# Filter out pywin32 and explicitly install required framework & PDF packages
+RUN grep -iv "pywin32" requirements.txt > requirements.container.txt && \
+    pip install --no-cache-dir -r requirements.container.txt fastapi uvicorn[standard] python-docx langgraph pypdf pdfplumber
 
 COPY . .
 
